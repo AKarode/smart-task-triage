@@ -5,19 +5,23 @@ import { seedRequests, type SeedRequest } from '@/lib/seed-requests';
 import { RequestList } from '@/components/request-list';
 import { RequestForm } from '@/components/request-form';
 import { ChatInterface } from '@/components/chat-interface';
+import { CachedTriageView } from '@/components/cached-triage-view';
 import { TracePanel } from '@/components/trace-panel';
 import { Badge } from '@/components/ui/badge';
-import type { TraceEntry } from '@/lib/types';
+import type { TraceEntry, TriageCache } from '@/lib/types';
 
 export default function Home() {
   const [requests, setRequests] = useState<SeedRequest[]>(seedRequests);
   const [selectedRequest, setSelectedRequest] = useState<SeedRequest | null>(null);
   const [traceEntries, setTraceEntries] = useState<TraceEntry[]>([]);
+  const [triageCache, setTriageCache] = useState<Map<string, TriageCache>>(new Map());
 
   const handleSelect = useCallback((request: SeedRequest) => {
     setSelectedRequest(request);
-    setTraceEntries([]);
-  }, []);
+    // Restore cached trace if available, otherwise clear
+    const cached = triageCache.get(request.id);
+    setTraceEntries(cached ? cached.traceEntries : []);
+  }, [triageCache]);
 
   const handleNewRequest = useCallback((request: SeedRequest) => {
     setRequests((prev) => [request, ...prev]);
@@ -27,6 +31,14 @@ export default function Home() {
 
   const handleTraceUpdate = useCallback((entries: TraceEntry[]) => {
     setTraceEntries(entries);
+  }, []);
+
+  const handleTriageComplete = useCallback((requestId: string, cache: TriageCache) => {
+    setTriageCache((prev) => {
+      const next = new Map(prev);
+      next.set(requestId, cache);
+      return next;
+    });
   }, []);
 
   const channelColors: Record<string, string> = {
@@ -48,7 +60,9 @@ export default function Home() {
             System Online
           </span>
           <span className="text-white/20">|</span>
-          <span>{requests.length} requests loaded</span>
+          <span>{requests.length} requests</span>
+          <span className="text-white/20">|</span>
+          <span>{triageCache.size} completed</span>
           <span className="text-white/20">|</span>
           <span>{traceEntries.length} trace events</span>
         </div>
@@ -85,6 +99,7 @@ export default function Home() {
               requests={requests}
               selectedId={selectedRequest?.id ?? null}
               onSelect={handleSelect}
+              completedIds={triageCache}
             />
           </div>
 
@@ -139,11 +154,18 @@ export default function Home() {
 
           {/* Chat area */}
           <div className="flex-1 overflow-hidden">
-            {selectedRequest ? (
+            {selectedRequest && triageCache.has(selectedRequest.id) ? (
+              <CachedTriageView
+                key={`cached-${selectedRequest.id}`}
+                request={selectedRequest}
+                cache={triageCache.get(selectedRequest.id)!}
+              />
+            ) : selectedRequest ? (
               <ChatInterface
                 key={selectedRequest.id}
                 request={selectedRequest}
                 onTraceUpdate={handleTraceUpdate}
+                onTriageComplete={handleTriageComplete}
               />
             ) : (
               /* Empty state */

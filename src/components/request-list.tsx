@@ -3,8 +3,9 @@
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Mail, Hash, Globe } from 'lucide-react';
+import { Mail, Hash, Globe, CheckCircle2, XCircle } from 'lucide-react';
 import type { SeedRequest } from '@/lib/seed-requests';
+import type { TriageCache } from '@/lib/types';
 
 const channelIcons = {
   email: Mail,
@@ -43,15 +44,17 @@ interface RequestListProps {
   requests: SeedRequest[];
   selectedId: string | null;
   onSelect: (request: SeedRequest) => void;
+  completedIds?: Map<string, TriageCache>;
 }
 
-export function RequestList({ requests, selectedId, onSelect }: RequestListProps) {
+export function RequestList({ requests, selectedId, onSelect, completedIds }: RequestListProps) {
   return (
     <ScrollArea className="h-full">
       <div className="space-y-0.5 p-2">
         {requests.map((request) => {
           const Icon = channelIcons[request.channel];
           const isSelected = selectedId === request.id;
+          const cached = completedIds?.get(request.id);
           return (
             <button
               key={request.id}
@@ -99,6 +102,13 @@ export function RequestList({ requests, selectedId, onSelect }: RequestListProps
                         minute: '2-digit',
                       })}
                     </span>
+                    {cached && (
+                      cached.decision === 'approved' ? (
+                        <CheckCircle2 className="size-3 text-emerald-500 ml-auto shrink-0" />
+                      ) : (
+                        <XCircle className="size-3 text-red-400 ml-auto shrink-0" />
+                      )
+                    )}
                   </div>
                 </div>
               </div>

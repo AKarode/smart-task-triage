@@ -34,3 +34,13 @@ export interface TraceEntry {
   input?: Record<string, unknown>;
   output?: Record<string, unknown>;
 }
+
+export interface TriageCache {
+  classification: Classification | null;
+  kbResults: KBSearchResult[];
+  draft: DraftResponse | null;
+  decision: 'approved' | 'rejected';
+  confirmationText: string;
+  traceEntries: TraceEntry[];
+  completedAt: string;
+}

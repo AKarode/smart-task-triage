@@ -9,11 +9,12 @@ import { ApprovalCard } from './approval-card';
 import { Search, Tag, FileText, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SeedRequest } from '@/lib/seed-requests';
-import type { TraceEntry } from '@/lib/types';
+import type { TraceEntry, TriageCache, Classification, KBSearchResult, DraftResponse } from '@/lib/types';
 
 interface ChatInterfaceProps {
   request: SeedRequest | null;
   onTraceUpdate: (entries: TraceEntry[]) => void;
+  onTriageComplete?: (requestId: string, cache: TriageCache) => void;
 }
 
 // Extract tool name from part type (e.g., "tool-classify_request" -> "classify_request")
@@ -34,7 +35,41 @@ const toolLabels: Record<string, string> = {
   draft_response: 'Preparing draft',
 };
 
-export function ChatInterface({ request, onTraceUpdate }: ChatInterfaceProps) {
+// Extract triage data from messages for caching
+// Uses `any` casts because AI SDK tool part types are complex unions
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractTriageData(messages: any[]) {
+  let classification: Classification | null = null;
+  let kbResults: KBSearchResult[] = [];
+  let draft: DraftResponse | null = null;
+  let confirmationText = '';
+
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    for (const part of message.parts) {
+      if (isToolUIPart(part)) {
+        const name = getToolName(part);
+        if (name === 'classify_request' && part.state === 'output-available') {
+          classification = part.output as Classification;
+        }
+        if (name === 'search_kb' && part.state === 'output-available') {
+          kbResults = part.output as KBSearchResult[];
+        }
+        if (name === 'draft_response' && part.input) {
+          draft = part.input as DraftResponse;
+        }
+      }
+      if (part.type === 'text') {
+        const text = part.text?.trim();
+        if (text) confirmationText = text;
+      }
+    }
+  }
+
+  return { classification, kbResults, draft, confirmationText };
+}
+
+export function ChatInterface({ request, onTraceUpdate, onTriageComplete }: ChatInterfaceProps) {
   const hasSent = useRef(false);
 
   const { messages, sendMessage, addToolOutput, status } = useChat({
@@ -250,8 +285,17 @@ export function ChatInterface({ request, onTraceUpdate }: ChatInterfaceProps) {
                                 approvedAt: new Date().toISOString(),
                               },
                             });
-                            // Manually continue the conversation after approval
                             await sendMessage({ text: 'The draft has been approved. Please confirm.' });
+                            // Cache the triage result
+                            if (onTriageComplete && request) {
+                              const data = extractTriageData(messages);
+                              onTriageComplete(request.id, {
+                                ...data,
+                                decision: 'approved',
+                                traceEntries,
+                                completedAt: new Date().toISOString(),
+                              });
+                            }
                           }}
                           onReject={async () => {
                             addToolOutput({
@@ -262,8 +306,17 @@ export function ChatInterface({ request, onTraceUpdate }: ChatInterfaceProps) {
                                 reason: 'Rejected by reviewer',
                               },
                             });
-                            // Manually continue the conversation after rejection
                             await sendMessage({ text: 'The draft has been rejected. Please revise.' });
+                            // Cache the triage result
+                            if (onTriageComplete && request) {
+                              const data = extractTriageData(messages);
+                              onTriageComplete(request.id, {
+                                ...data,
+                                decision: 'rejected',
+                                traceEntries,
+                                completedAt: new Date().toISOString(),
+                              });
+                            }
                           }}
                         />
                       );
