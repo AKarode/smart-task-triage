@@ -1,0 +1,39 @@
+You are building Smart Triage, a Next.js 15 App Router project using Vercel AI SDK 6.
+
+STACK: Next.js 15 + TypeScript + Vercel AI SDK 6 (`ai` package) + `@ai-sdk/openai` + `@ai-sdk/react` + Tailwind CSS + shadcn/ui + Zod.
+
+CRITICAL RULES:
+- Use `streamText` with tools for the API route, NOT `ToolLoopAgent`
+- Use `useChat` from `@ai-sdk/react` with `DefaultChatTransport` for the frontend
+- The `draft_response` tool must NOT have an `execute` function — it's a client-side approval tool
+- Use `addToolOutput` to handle approve/reject on the client
+- Use `embed` and `embedMany` from `ai` package for vector search — NO external vector DB
+- Use `openai.embeddingModel('text-embedding-3-small')` for embeddings
+- Use `convertToModelMessages` to convert UIMessages for the model
+- Return `result.toUIMessageStreamResponse()` from the API route
+- All state is in-memory (Map/Array) — no database
+- Use shadcn/ui components for UI elements
+- Message parts are in `message.parts` array — iterate these for rendering tool states
+
+AI SDK 6 IMPORTS:
+```typescript
+// Server
+import { streamText, convertToModelMessages, UIMessage, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+// Client
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
+```
+
+TOOL PART STATES in message.parts:
+- `'partial-call'` — tool is being called (streaming)
+- `'call'` — tool call complete, waiting for execution/approval
+- `'partial-output'` — output is streaming
+- `'output-available'` — tool execution complete, output available
+
+For client-side tools (no execute fn), render UI when state is `'call'`.
+After user action, call `addToolOutput({ toolCallId, output })`.
+
+Refer to AGENTS.md in project root for full architecture details.
